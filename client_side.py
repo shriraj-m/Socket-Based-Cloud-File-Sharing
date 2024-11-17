@@ -1,7 +1,5 @@
 import socket
 import os
-from datetime import datetime
-import json
 
 
 class FileClient:
@@ -42,4 +40,6 @@ class FileClient:
 
     def close(self):
         self.socket.close()
+
+
 
