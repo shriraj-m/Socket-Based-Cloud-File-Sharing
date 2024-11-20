@@ -20,3 +20,4 @@ class Network_Statistics:
     def save_stats(self, file_name='network_statistics.json'):
         with open(file_name, 'w') as file:
             json.dump(self.transfer_statistics, file, indent=2)
+
