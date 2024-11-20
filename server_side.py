@@ -64,9 +64,23 @@ class FileServer:
         print(f'Connection closed from IP {address[0]} port: {address[1]}')
 
     def handle_dir(self, connection):
-        files = os.listdir(self.storage_path)
-        response = '\n'.join(files)
-        connection.send(response.encode())
+        try:
+            files = os.listdir(self.storage_path)
+            file_info = []
+
+            for file_name in files:
+                file_path = os.path.join(self.storage_path, file_name)
+                size = os.path.getsize(file_path)
+                modified = os.path.getmtime(file_path)
+                # Only include the filename without additional metadata
+                file_info.append(file_name)  # Changed this line
+
+            response = "\n".join(file_info) if file_info else "No Files Found"
+            connection.send(response.encode())
+
+        except Exception as ex:
+            print(f"Directory listing error: {str(ex)}")
+            connection.send(f"Directory listing failed: {str(ex)}".encode())
 
     # Implement Later
     def handle_upload(self, connection, args):
