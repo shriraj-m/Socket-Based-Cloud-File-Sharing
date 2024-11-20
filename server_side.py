@@ -72,8 +72,60 @@ class FileServer:
     def handle_upload(self, connection, args):
         pass
 
-    def handle_download(self, connection, args):
-        pass
+    def handle_download(self, connection, file_name):
+        try:
+            file_path = os.path.join(self.storage_path, file_name)
+            if not os.path.exists(file_path):
+                connection.send("File not found".encode())
+                return
 
-    def handle_delete(self, connection, args):
-        pass
+            file_size = os.path.getsize(file_path)
+            connection.send(str(file_size).encode())
+
+            if connection.recv(1024).decode() != "Ready":
+                return
+
+            start_time = datetime.now()
+            size = 0
+
+            with open(file_path, 'rb') as file:
+                while True:
+                    chunk = file.read(4096)
+                    if not chunk:
+                        break
+                    connection.send(chunk)
+                    size += len(chunk)
+
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            transfer_rate = (file_size / (1024 * 1024)) / duration
+            network_stats = Network_Statistics()
+            network_stats.transfer_stats(
+                'upload',
+                file_name,
+                size,
+                duration,
+                transfer_rate
+            )
+        except Exception as ex:
+            connection.send(f"Download Failed: {str(ex)}".encode())
+
+    def handle_delete(self, connection, file_name):
+        try:
+            file_path = os.path.join(self.storage_path, file_name)
+
+            if not os.path.exists(file_path):
+                connection.send("File not found".encode())
+                return
+
+            os.remove(file_path)
+            connection.send("File deleted successfully".encode())
+
+        except Exception as ex:
+            print(f"Delete error: {str(ex)}")
+            connection.send(f"Delete failed: {str(ex)}".encode())
+
+
+if __name__ == '__main__':
+    server = FileServer()
+    server.start()
