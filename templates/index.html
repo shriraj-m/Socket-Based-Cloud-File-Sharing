@@ -6,7 +6,7 @@
     <title>File Sharing Client</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.2/axios.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/js/all.min.js"></script>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="../static/styles.css">
 </head>
 <body>
     <div class="container">
@@ -172,7 +172,7 @@
             isUploading = true;
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('overwrite', 'false'); // Initially try without overwrite
+            formData.append('overwrite', 'false');
 
             const CancelToken = axios.CancelToken;
             const source = CancelToken.source();
@@ -187,42 +187,46 @@
                     source.cancel('Upload timeout: Operation took too long');
                 }, timeoutSeconds * 1000);
 
-                const response = await axios.post('/upload', formData, {
-                    headers: {
-                        'Content-Type': 'multipart/form-data'
-                    },
-                    cancelToken: source.token
-                });
+                try {
+                    const response = await axios.post('/upload', formData, {
+                        headers: {
+                            'Content-Type': 'multipart/form-data'
+                        },
+                        cancelToken: source.token
+                    });
 
-                clearTimeout(uploadTimeout);
+                    console.log('Full upload response:', response.data);  // Log entire response
 
-                if (response.data.needsOverwrite) {
-                    // Ask user for overwrite confirmation
-                    if (confirm(`File ${file.name} already exists. Do you want to overwrite it?`)) {
-                        // Retry with overwrite flag
-                        formData.set('overwrite', 'true');
-                        const overwriteResponse = await axios.post('/upload', formData, {
-                            headers: {
-                                'Content-Type': 'multipart/form-data'
+                    // More explicit handling
+                    if (response.data.success === true) {
+                        showSuccess(response.data.message || 'File uploaded successfully!');
+                        refreshFiles();
+                        fileInput.value = '';
+                    } else if (response.data.needsOverwrite) {
+                        if (confirm(`File ${file.name} already exists. Do you want to overwrite it?`)) {
+                            formData.set('overwrite', 'true');
+                            const overwriteResponse = await axios.post('/upload', formData, {
+                                headers: {
+                                    'Content-Type': 'multipart/form-data'
+                                }
+                            });
+
+                            if (overwriteResponse.data.success) {
+                                showSuccess('File uploaded successfully!');
+                                refreshFiles();
+                                fileInput.value = '';
+                            } else {
+                                throw new Error(overwriteResponse.data.message || 'Upload failed');
                             }
-                        });
-
-                        if (overwriteResponse.data.success) {
-                            showSuccess('File uploaded successfully!');
-                            refreshFiles();
-                            fileInput.value = '';
                         } else {
-                            throw new Error(overwriteResponse.data.message || 'Upload failed');
+                            showError('Upload cancelled - file already exists');
                         }
                     } else {
-                        showError('Upload cancelled - file already exists');
+                        throw new Error(response.data.message || 'Upload failed with unknown error');
                     }
-                } else if (response.data.success) {
-                    showSuccess('File uploaded successfully!');
-                    refreshFiles();
-                    fileInput.value = '';
-                } else {
-                    throw new Error(response.data.message || 'Upload failed');
+                } catch (error) {
+                    console.error('Detailed upload error:', error.response?.data || error);
+                    showError(`Upload failed: ${error.response?.data?.message || error.message}`);
                 }
             } catch (error) {
                 console.error('Upload error:', error);
@@ -233,6 +237,28 @@
                 }
             } finally {
                 resetUploadState();
+            }
+        }
+
+        // Update the progress handling
+        socket.on('upload_progress', function(data) {
+            if (data.progress !== undefined) {
+                updateUploadProgress(data.progress);
+            }
+        });
+
+        // New helper function to handle upload response
+        function handleUploadResponse(responseData, file, fileInput) {
+            console.log('Handling upload response:', responseData);  // Debug log
+
+            if (responseData.success === true) {  // Explicit comparison
+                showSuccess('File uploaded successfully!');
+                refreshFiles();
+                fileInput.value = '';
+            } else if (responseData.message) {
+                throw new Error(responseData.message);
+            } else {
+                throw new Error('Upload failed with unknown error');
             }
         }
 

@@ -14,7 +14,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
-HOST_IP = ''  # INCLUDE BEFORE RUNNING {WILL CHANGE LATER}
+HOST_IP = '34.45.39.172'  # INCLUDE BEFORE RUNNING {WILL CHANGE LATER}
 
 
 class FileClient:
@@ -73,18 +73,24 @@ class FileClient:
 
                 # Send upload command with overwrite flag
                 upload_command = f"upload {file_name} {'overwrite' if overwrite else ''}"
-                print(f"Sending command: {upload_command}")
+                print(f"DEBUG - Sending command: {upload_command}")
                 self.socket.send(upload_command.encode())
 
                 # Send file size
-                print(f"Sending file size: {file_size}")
+                print(f"DEBUG - Sending file size: {file_size}")
                 self.socket.send(str(file_size).encode())
 
                 # Wait for server response
                 response = self.socket.recv(1024).decode()
-                print(f"Server response: {response}")
+                print(f"DEBUG - Server initial response: {response}")
 
-                if "Ready" in response or "ready" in response.lower():
+                # More explicit handling of overwrite scenario
+                if "confirm overwrite" in response.lower():
+                    if not overwrite:
+                        print("DEBUG - Overwrite required but not confirmed")
+                        return False, "File exists, overwrite not confirmed"
+
+                if any(r in response.lower() for r in ["ready", "confirm"]):
                     with open(file_path, 'rb') as f:
                         bytes_sent = 0
                         while bytes_sent < file_size:
@@ -101,20 +107,33 @@ class FileClient:
                                 'progress': progress,
                                 'filename': file_name
                             })
+                            print(f"DEBUG - Progress: {progress}%")
 
                     # Wait for final confirmation
                     final_response = self.socket.recv(1024).decode()
-                    print(f"Final response: {final_response}")
+                    print(f"DEBUG - Final response: {final_response}")
 
-                    if "100.0" in final_response.lower():
+                    # More comprehensive success checking
+                    success_indicators = [
+                        "100.0",
+                        "success",
+                        "upload complete",
+                        "complete",
+                        "received"
+                    ]
+
+                    if any(indicator in final_response.lower() for indicator in success_indicators):
+                        print("DEBUG - Upload successful")
                         return True, "File uploaded successfully"
                     else:
-                        # Log and handle errors more gracefully
-                        print(f"Upload failed with message: {final_response}")
-                        return False, final_response
+                        print(f"DEBUG - Upload failed: {final_response}")
+                        return False, f"Upload failed: {final_response}"
+
+                print(f"DEBUG - Unexpected server response: {response}")
+                return False, f"Unexpected server response: {response}"
 
             except Exception as ex:
-                print(f"Upload error: {str(ex)}")
+                print(f"DEBUG - Upload error: {str(ex)}")
                 self.connected = False
                 return False, f"Upload failed: {str(ex)}"
             finally:
@@ -122,7 +141,7 @@ class FileClient:
                     try:
                         os.unlink(file_path)
                     except Exception as e:
-                        print(f"Warning: Failed to delete temporary file: {e}")
+                        print(f"WARNING: Failed to delete temporary file: {e}")
 
     def download_file(self, file_name):
         with self.lock:
@@ -218,13 +237,24 @@ def upload_file():
     if file.filename == '':
         return jsonify({'success': False, 'message': 'No file selected'})
 
-    print(f"Attempting to upload file: {file.filename} (overwrite: {overwrite})")
+    print(f"DEBUG - Attempting to upload file: {file.filename} (overwrite: {overwrite})")
     success, message = client.upload_file(file, overwrite)
 
-    if not success and "confirm overwrite" in message.lower():
-        return jsonify({'success': False, 'message': message, 'needsOverwrite': True})
+    print(f"DEBUG - Upload result - Success: {success}, Message: {message}")
 
-    return jsonify({'success': success, 'message': message})
+    # Handle overwrite confirmation case
+    if not success and "confirm overwrite" in message.lower():
+        return jsonify({
+            'success': False,
+            'message': message,
+            'needsOverwrite': True
+        })
+
+    # Return the actual success status and message
+    return jsonify({
+        'success': success,
+        'message': message
+    })
 
 @socketio.on('connect')
 def handle_connect():
