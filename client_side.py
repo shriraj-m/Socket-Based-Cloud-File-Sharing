@@ -14,8 +14,6 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
-HOST_IP = ''  # INCLUDE BEFORE RUNNING {WILL CHANGE LATER}
-
 
 class FileClient:
     def __init__(self):
@@ -187,7 +185,7 @@ def index():
 @app.route('/connect', methods=['POST'])
 def connect():
     try:
-        success = client.connect(HOST_IP, 3300)
+        success = client.connect('34.30.93.242', 3300)
         message = f'Connected to Server at {client.host}:{client.port}' if success else 'Connection failed'
         return jsonify({
             'success': success,
