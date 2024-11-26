@@ -99,24 +99,19 @@ class FileServer:
 
     # Implement Later
     def handle_upload(self, connection, file_name):
-        # Function to handle uploads
         try:
             file_size = int(connection.recv(1024).decode())
-            connection.send("Ready".encode())
             file_path = os.path.join(self.storage_path, file_name)
-            if not os.path.exists(file_path):
-                connection.send("File not found".encode())
-                return
 
-            file_path = os.path.join(self.storage_path, file_name)
+            # If file exists, ask about overwriting
             if os.path.exists(file_path):
                 connection.send("File Exists. Overwrite? (Yes/No): ".encode())
                 response = connection.recv(1024).decode().lower()
                 if response != 'yes':
                     connection.send("Upload Canceled.".encode())
                     return
-                else:
-                    connection.send("Overwrite Confirmed.".encode())
+
+            connection.send("Ready".encode())
 
             start_time = datetime.now()
             received_size = 0
@@ -128,8 +123,6 @@ class FileServer:
                         break
                     file.write(chunk)
                     received_size += len(chunk)
-                    progress = (received_size / file_size) * 100
-                    connection.send(f"Progress:{progress}".encode())
 
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()

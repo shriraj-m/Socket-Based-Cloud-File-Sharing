@@ -17,8 +17,8 @@
         </div>
 
         <div class="connect-form">
-            <input type="text" id="host" placeholder="Server Host" value="localhost">
-            <input type="number" id="port" placeholder="Port" value="5000">
+            <input type="text" id="host" placeholder="Server Host" value="">
+            <input type="number" id="port" placeholder="Port" value="3300">
             <button onclick="connect()">Connect</button>
         </div>
 
@@ -132,15 +132,24 @@
             const host = document.getElementById('host').value;
             const port = document.getElementById('port').value;
             try {
-                const response = await axios.post('/connect');
+                const response = await axios.post('/connect', {
+                    host: host,
+                    port: parseInt(port)
+                });
                 if (response.data.success) {
                     updateConnectionStatus(true, host, port);
                     showSuccess(response.data.message);
+                    const uploadButton = document.getElementById('uploadButton');
+                    const refreshButton = document.querySelector('.file-list button');
+
+                    if (uploadButton) uploadButton.disabled = false;
+                    if (refreshButton) refreshButton.disabled = false;
                     refreshFiles();
                 }
             } catch (error) {
                 console.error('Connection error:', error); // Added for debugging
                 showError('Connection failed: ' + (error.response?.data?.message || error.message));
+                resetConnectionState();
             }
         }
 
@@ -150,6 +159,36 @@
             }
             resetUploadState();
             showError('Upload cancelled');
+        }
+
+
+        function resetConnectionState() {
+            // Reset connection status
+            updateConnectionStatus(false);
+
+            // Clear file list
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '<p>No connection - Please connect to a server</p>';
+
+            // Reset upload section
+            document.getElementById('fileInput').value = '';
+
+            // Disable upload and file list buttons
+            const uploadButton = document.getElementById('uploadButton');
+            const refreshButton = document.querySelector('.file-list button');
+
+            if (uploadButton) {
+                uploadButton.disabled = true;
+            }
+            if (refreshButton) {
+                refreshButton.disabled = true;
+            }
+
+            // Clear any success or error messages
+            const errorMessage = document.getElementById('errorMessage');
+            const successMessage = document.getElementById('successMessage');
+            if (errorMessage) errorMessage.textContent = '';
+            if (successMessage) successMessage.textContent = '';
         }
 
         async function uploadFile() {
@@ -292,6 +331,7 @@
                 }
             } catch (error) {
                 console.error('Refresh files error:', error); // Added for debugging
+                resetConnectionState();
                 showError('Failed to refresh file list: ' + (error.response?.data?.message || error.message));
             }
         }

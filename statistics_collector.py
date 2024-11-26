@@ -1,10 +1,18 @@
 from datetime import datetime
 import json
+import os
 
 
 class Network_Statistics:
-    def __init__(self):
+    def __init__(self, file_name='network_statistics.json'):
         self.transfer_statistics = []
+        self.stats_file = file_name
+        if os.path.exists(file_name):
+            try:
+                with open(file_name, 'r') as file:
+                    self.transfer_statistics = json.load(file)
+            except (json.JSONDecodeError, IOError):
+                self.transfer_statistics = []
 
     def transfer_stats(self, operation, file_name, size, duration, rate):
         self.transfer_statistics.append({
@@ -15,6 +23,8 @@ class Network_Statistics:
             'seconds_duration': duration,
             'mbps_rate': rate
         })
+
+        self.save_stats()
 
     # Json very efficient to view offline
     def save_stats(self, file_name='network_statistics.json'):

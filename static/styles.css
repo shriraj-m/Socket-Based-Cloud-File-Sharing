@@ -16,6 +16,18 @@ body {
     margin-bottom: 20px;
     border-radius: 4px;
 }
+.connection-status.disconnected {
+    background-color: #dc3545;
+    color: white;
+}
+.connection-status.connected {
+    background-color: #28a745;
+    color: white;
+}
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 .connected {
     background-color: #d4edda;
     color: #155724;

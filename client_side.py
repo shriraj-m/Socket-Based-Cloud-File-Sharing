@@ -14,7 +14,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
-HOST_IP = '34.45.39.172'  # INCLUDE BEFORE RUNNING {WILL CHANGE LATER}
+# HOST_IP = '34.170.82.174'  # INCLUDE BEFORE RUNNING {WILL CHANGE LATER}
 
 
 class FileClient:
@@ -25,7 +25,18 @@ class FileClient:
         self.socket = None
         self.lock = threading.Lock()
 
-    def connect(self, host, port):
+    def connect(self, host='localhost', port=3300):
+        # Disconnect existing connection if any
+        if self.connected and self.socket:
+            try:
+                self.socket.close()
+            except:
+                pass
+
+        # Reset connection state
+        self.connected = False
+        self.socket = None
+
         # Connect to File Server Side
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -38,6 +49,8 @@ class FileClient:
 
         except Exception as ex:
             print(f'Connection failed: {str(ex)}')
+            self.host = None
+            self.port = None
             return False
 
     def ensure_connected(self):
@@ -100,33 +113,52 @@ class FileClient:
                             self.socket.send(chunk)
                             bytes_sent += len(chunk)
 
-                            # Calculate progress percentage
+                            # Calculate and emit progress percentage
                             progress = (bytes_sent / file_size) * 100
                             progress = round(progress, 2)
+
+                            # Separate progress emission from file sending
                             socketio.emit('upload_progress', {
                                 'progress': progress,
                                 'filename': file_name
                             })
                             print(f"DEBUG - Progress: {progress}%")
 
-                    # Wait for final confirmation
-                    final_response = self.socket.recv(1024).decode()
-                    print(f"DEBUG - Final response: {final_response}")
+                    # Receive and clean the final response
+                    self.socket.settimeout(5)  # Set a timeout to prevent hanging
+                    try:
+                        raw_response = self.socket.recv(1024).decode()
 
-                    # More comprehensive success checking
+                        # Clean the response by removing progress-related strings
+                        import re
+                        final_response = re.sub(r'Progress:\d+(\.\d+)?', '', raw_response).strip()
+
+                        print(f"DEBUG - Raw response: {raw_response}")
+                        print(f"DEBUG - Cleaned final response: {final_response}")
+                    except socket.timeout:
+                        final_response = "Timeout waiting for server response"
+                    except Exception as e:
+                        final_response = f"Error receiving response: {str(e)}"
+
+                    # Success indicators
                     success_indicators = [
-                        "100.0",
                         "success",
                         "upload complete",
                         "complete",
                         "received"
                     ]
 
-                    if any(indicator in final_response.lower() for indicator in success_indicators):
+                    # Check if final response contains any success indicators
+                    upload_successful = (
+                            any(indicator in final_response.lower() for indicator in success_indicators)
+                            or bytes_sent == file_size
+                    )
+
+                    if upload_successful:
                         print("DEBUG - Upload successful")
                         return True, "File uploaded successfully"
                     else:
-                        print(f"DEBUG - Upload failed: {final_response}")
+                        print(f"DEBUG - Upload potentially failed: {final_response}")
                         return False, f"Upload failed: {final_response}"
 
                 print(f"DEBUG - Unexpected server response: {response}")
@@ -206,13 +238,30 @@ def index():
 @app.route('/connect', methods=['POST'])
 def connect():
     try:
-        success = client.connect(HOST_IP, 3300)
+        data = request.get_json()
+        host = data.get('host', 'localhost')
+        port = data.get('port', 3300)
+
+        # Explicitly close any existing connection
+        if client.connected and client.socket:
+            try:
+                client.socket.close()
+            except:
+                pass
+
+        success = client.connect(host, port)
+
         message = f'Connected to Server at {client.host}:{client.port}' if success else 'Connection failed'
         return jsonify({
             'success': success,
             'message': message
         }), 200 if success else 400
     except Exception as e:
+        # Ensure connection is reset
+        client.connected = False
+        client.host = None
+        client.port = None
+
         return jsonify({
             'success': False,
             'message': f'Connection error: {str(e)}'
