@@ -30,13 +30,13 @@ A client-server program / application that enables file sharing over a network u
   - Socket.IO for real-time communication
 
 ## Client Side Project Structure
-Socket-Based-Cloud-File-Sharing/
-├── client_side.py 
-├── static/
-│ └── styles.css 
-├── templates/
-│ └── index.html 
-├── client_uploads/
+- Socket-Based-Cloud-File-Sharing/
+  - ├── client_side.py 
+  - ├── static/
+  - │ └── styles.css 
+  - ├── templates/
+  - │ └── index.html 
+  - ├── client_uploads/
 
 ## Server Side Project Structure
 ├── server_side.py 
