@@ -49,13 +49,14 @@
         // Global variables
         let uploadTimeout;
         let currentUpload = null;
-        let isUploading = false;  // Added this declaration
+        let isUploading = false;  
         const socket = io();
 
         socket.on('upload_progress', function(data) {
             updateUploadProgress(data.progress);
         });
 
+        // Function to reset the upload state.
         function resetUploadState() {
             isUploading = false;
             if (uploadTimeout) {
@@ -66,6 +67,7 @@
             document.getElementById('cancelUpload').style.display = 'none';
         }
 
+        // Function to show error messages.
         function showError(message) {
             console.error('Error:', message); // Added for debugging
             const errorDiv = document.getElementById('errorMessage');
@@ -76,6 +78,7 @@
             }, 5000);
         }
 
+        // Function to show success messages.
         function showSuccess(message) {
             const successDiv = document.getElementById('successMessage');
             successDiv.textContent = message;
@@ -85,7 +88,7 @@
             }, 5000);
         }
 
-        // Update the progress handling
+        // Function to update the progress of the upload.
         function updateUploadProgress(percent) {
             const progressBar = document.getElementById('progressBar');
             const progressText = document.getElementById('progressText');
@@ -98,13 +101,14 @@
             }
         }
 
-        // Add Socket.IO event listener for progress updates
+        // Socket.IO event listener for progress updates
         socket.on('upload_progress', function(data) {
             if (data.progress !== undefined) {
                 updateUploadProgress(data.progress);
             }
         });
 
+        // Function to reset the progress of the upload.
         function resetUploadProgress() {
             const progressContainer = document.getElementById('progressContainer');
             const progressBar = document.getElementById('progressBar');
@@ -117,6 +121,7 @@
             if (uploadButton) uploadButton.disabled = false;
         }
 
+        // Function to update the connection status.
         function updateConnectionStatus(connected = false, host = '', port = '') {
             const status = document.getElementById('connectionStatus');
             if (connected) {
@@ -128,6 +133,7 @@
             }
         }
 
+        // Function to connect to the server.
         async function connect() {
             const host = document.getElementById('host').value;
             const port = document.getElementById('port').value;
@@ -153,6 +159,7 @@
             }
         }
 
+        // Function to cancel the upload.
         function cancelUpload() {
             if (currentUpload) {
                 currentUpload.cancel();
@@ -161,19 +168,15 @@
             showError('Upload cancelled');
         }
 
-
+        // Function to reset the connection state.
         function resetConnectionState() {
-            // Reset connection status
             updateConnectionStatus(false);
 
-            // Clear file list
             const fileList = document.getElementById('fileList');
             fileList.innerHTML = '<p>No connection - Please connect to a server</p>';
 
-            // Reset upload section
             document.getElementById('fileInput').value = '';
 
-            // Disable upload and file list buttons
             const uploadButton = document.getElementById('uploadButton');
             const refreshButton = document.querySelector('.file-list button');
 
@@ -184,13 +187,13 @@
                 refreshButton.disabled = true;
             }
 
-            // Clear any success or error messages
             const errorMessage = document.getElementById('errorMessage');
             const successMessage = document.getElementById('successMessage');
             if (errorMessage) errorMessage.textContent = '';
             if (successMessage) successMessage.textContent = '';
         }
 
+        // Function to upload a file to the server.
         async function uploadFile() {
             if (isUploading) {
                 console.log('Upload already in progress');
@@ -234,28 +237,45 @@
                         cancelToken: source.token
                     });
 
-                    console.log('Full upload response:', response.data);  // Log entire response
+                    console.log('Full upload response:', response.data); 
 
-                    // More explicit handling
                     if (response.data.success === true) {
                         showSuccess(response.data.message || 'File uploaded successfully!');
                         refreshFiles();
                         fileInput.value = '';
-                    } else if (response.data.needsOverwrite) {
-                        if (confirm(`File ${file.name} already exists. Do you want to overwrite it?`)) {
-                            formData.set('overwrite', 'true');
-                            const overwriteResponse = await axios.post('/upload', formData, {
+                    } else if (response.data.message === 'File Exists.') {
+                        const confirmOverwrite = confirm(`${file.name} already exists. Do you want to overwrite it?`);
+
+                        if (confirmOverwrite) {
+                            const overwriteFormData = new FormData();
+                            overwriteFormData.append('file', file);
+                            overwriteFormData.append('overwrite', 'true');
+
+                            try {
+                                const response = await axios.delete(`/delete/${encodeURIComponent(filename)}`);
+                                if (response.data.success) {
+                                    showSuccess('File deleted successfully');
+                                    refreshFiles();
+                                } else {
+                                    throw new Error(response.data.message);
+                                }
+                            } catch (error) {
+                                console.error('Delete error:', error);
+                                showError('Delete failed: ' + (error.response?.data?.message || error.message));
+                            }
+
+                            const overwriteResponse = await axios.post('/upload', overwriteFormData, {
                                 headers: {
                                     'Content-Type': 'multipart/form-data'
                                 }
                             });
 
                             if (overwriteResponse.data.success) {
-                                showSuccess('File uploaded successfully!');
+                                showSuccess('File overwritten successfully!');
                                 refreshFiles();
                                 fileInput.value = '';
                             } else {
-                                throw new Error(overwriteResponse.data.message || 'Upload failed');
+                                throw new Error(overwriteResponse.data.message || 'Overwrite failed');
                             }
                         } else {
                             showError('Upload cancelled - file already exists');
@@ -288,9 +308,9 @@
 
         // New helper function to handle upload response
         function handleUploadResponse(responseData, file, fileInput) {
-            console.log('Handling upload response:', responseData);  // Debug log
+            console.log('Handling upload response:', responseData);  
 
-            if (responseData.success === true) {  // Explicit comparison
+            if (responseData.success === true) {  
                 showSuccess('File uploaded successfully!');
                 refreshFiles();
                 fileInput.value = '';
@@ -301,6 +321,7 @@
             }
         }
 
+        // Function to refresh the file list.
         async function refreshFiles() {
             try {
                 const response = await axios.get('/list');
@@ -330,21 +351,23 @@
                     fileList.innerHTML = '<p>No files found</p>';
                 }
             } catch (error) {
-                console.error('Refresh files error:', error); // Added for debugging
+                console.error('Refresh files error:', error); 
                 resetConnectionState();
                 showError('Failed to refresh file list: ' + (error.response?.data?.message || error.message));
             }
         }
 
+        // Function to download a file from the server.
         async function downloadFile(filename) {
             try {
                 window.location.href = `/download/${encodeURIComponent(filename)}`;
             } catch (error) {
-                console.error('Download error:', error); // Added for debugging
+                console.error('Download error:', error); 
                 showError('Download failed: ' + error.message);
             }
         }
 
+        // Function to delete a file from the server.
         async function deleteFile(filename) {
             if (!confirm(`Are you sure you want to delete ${filename}?`)) {
                 return;

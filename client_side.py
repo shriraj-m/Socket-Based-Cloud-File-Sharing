@@ -1,22 +1,24 @@
 import socket
 import os
-import json
+import re
 import threading
 from flask import Flask, render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 from flask_socketio import SocketIO, emit
 
+# Creates a flask app. 
 app = Flask(__name__)
+# Defines an upload folder for the client side.
 app.config['UPLOAD_FOLDER'] = 'client_uploads'
+# Defines the maximum content length for the upload folder.
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 * 1024
+# Creates a socketio object for the app.
 socketio = SocketIO(app, cors_allowed_origins="*")
-
+# Creates the upload folder if it doesn't exist.
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
-# HOST_IP = '34.170.82.174'  # INCLUDE BEFORE RUNNING {WILL CHANGE LATER}
-
-
+# Class that contains all methods for the client side.
 class FileClient:
     def __init__(self):
         self.host = None
@@ -25,8 +27,8 @@ class FileClient:
         self.socket = None
         self.lock = threading.Lock()
 
+    # Method to connect to the server.
     def connect(self, host='localhost', port=3300):
-        # Disconnect existing connection if any
         if self.connected and self.socket:
             try:
                 self.socket.close()
@@ -37,7 +39,6 @@ class FileClient:
         self.connected = False
         self.socket = None
 
-        # Connect to File Server Side
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((host, port))
@@ -52,15 +53,16 @@ class FileClient:
             self.host = None
             self.port = None
             return False
-
+        
+    # Method to ensure that the client is connected to the server.
     def ensure_connected(self):
         if not self.connected and self.host and self.port:
             self.connect(self.host, self.port)
 
+    # Method to list all files in the server.
     def list_files(self):
         with self.lock:
             try:
-                # Get All Files from Server
                 self.ensure_connected()
                 self.socket.send("dir".encode())
                 response = self.socket.recv(4096).decode()
@@ -71,6 +73,7 @@ class FileClient:
                 response = f"Failed to list files: {str(ex)}"
                 return False, response
 
+    # Method to upload a file to the server.
     def upload_file(self, file, overwrite=False):
         with self.lock:
             file_path = None
@@ -80,28 +83,30 @@ class FileClient:
                 file_name = secure_filename(file.filename)
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], file_name)
 
-                # Save the uploaded file temporarily
                 file.save(file_path)
                 file_size = os.path.getsize(file_path)
 
-                # Send upload command with overwrite flag
                 upload_command = f"upload {file_name} {'overwrite' if overwrite else ''}"
                 print(f"DEBUG - Sending command: {upload_command}")
+                if overwrite:
+                    self.socket.send('yes'.encode())
                 self.socket.send(upload_command.encode())
 
-                # Send file size
-                print(f"DEBUG - Sending file size: {file_size}")
-                self.socket.send(str(file_size).encode())
-
-                # Wait for server response
                 response = self.socket.recv(1024).decode()
                 print(f"DEBUG - Server initial response: {response}")
 
-                # More explicit handling of overwrite scenario
-                if "confirm overwrite" in response.lower():
-                    if not overwrite:
-                        print("DEBUG - Overwrite required but not confirmed")
-                        return False, "File exists, overwrite not confirmed"
+                print(f"DEBUG - Sending file size: {file_size}")
+                self.socket.send(str(file_size).encode())
+
+                response = self.socket.recv(1024).decode()
+                print(f"DEBUG - Server initial response: {response}")
+
+                if response == "File Exists. Overwrite? (Yes/No): ":
+                    if overwrite:
+                        print(f"DEBUG - YES OVERWRITE: {response}")
+                        self.socket.send('yes'.encode())
+                    else:
+                        return False, "File Exists."
 
                 if any(r in response.lower() for r in ["ready", "confirm"]):
                     with open(file_path, 'rb') as f:
@@ -113,24 +118,18 @@ class FileClient:
                             self.socket.send(chunk)
                             bytes_sent += len(chunk)
 
-                            # Calculate and emit progress percentage
                             progress = (bytes_sent / file_size) * 100
                             progress = round(progress, 2)
 
-                            # Separate progress emission from file sending
                             socketio.emit('upload_progress', {
                                 'progress': progress,
                                 'filename': file_name
                             })
                             print(f"DEBUG - Progress: {progress}%")
 
-                    # Receive and clean the final response
-                    self.socket.settimeout(5)  # Set a timeout to prevent hanging
+                    self.socket.settimeout(5)  
                     try:
                         raw_response = self.socket.recv(1024).decode()
-
-                        # Clean the response by removing progress-related strings
-                        import re
                         final_response = re.sub(r'Progress:\d+(\.\d+)?', '', raw_response).strip()
 
                         print(f"DEBUG - Raw response: {raw_response}")
@@ -140,7 +139,6 @@ class FileClient:
                     except Exception as e:
                         final_response = f"Error receiving response: {str(e)}"
 
-                    # Success indicators
                     success_indicators = [
                         "success",
                         "upload complete",
@@ -148,7 +146,6 @@ class FileClient:
                         "received"
                     ]
 
-                    # Check if final response contains any success indicators
                     upload_successful = (
                             any(indicator in final_response.lower() for indicator in success_indicators)
                             or bytes_sent == file_size
@@ -175,6 +172,7 @@ class FileClient:
                     except Exception as e:
                         print(f"WARNING: Failed to delete temporary file: {e}")
 
+    # Method to download a file from the server.
     def download_file(self, file_name):
         with self.lock:
             try:
@@ -190,7 +188,7 @@ class FileClient:
 
                 received_size = 0
                 full_file_path = os.path.join(app.config['UPLOAD_FOLDER'], file_name)
-                print(f"Downloading to: {full_file_path}")  # Debug print
+                print(f"Downloading to: {full_file_path}")  
 
                 with open(full_file_path, 'wb') as file:
                     while received_size < file_size:
@@ -200,13 +198,14 @@ class FileClient:
                         file.write(chunk)
                         received_size += len(chunk)
 
-                print(f"Download complete. File size: {received_size}")  # Debug print
+                print(f"Download complete. File size: {received_size}")  
                 return True, full_file_path
             except Exception as ex:
-                print(f"Download error: {str(ex)}")  # Debug print
+                print(f"Download error: {str(ex)}")  
                 self.connected = False
                 return False, str(ex)
-
+            
+    # Method to delete a file from the server.
     def delete_file(self, file_name):
         with self.lock:
             try:
@@ -222,10 +221,10 @@ class FileClient:
     def close(self):
         self.socket.close()
 
-
+# Creates a client object to be used in the flask app.
 client = FileClient()
 
-
+# Route to render the index.html file.
 @app.route('/')
 def index():
     return render_template('index.html',
@@ -234,7 +233,7 @@ def index():
                            port=client.port
                            )
 
-
+# Route to connect to the server.
 @app.route('/connect', methods=['POST'])
 def connect():
     try:
@@ -257,7 +256,6 @@ def connect():
             'message': message
         }), 200 if success else 400
     except Exception as e:
-        # Ensure connection is reset
         client.connected = False
         client.host = None
         client.port = None
@@ -267,14 +265,14 @@ def connect():
             'message': f'Connection error: {str(e)}'
         }), 500
 
-
+# Route to list all files in the server.
 @app.route('/list', methods=['GET'])
 def list_files():
     success, response = client.list_files()
     files = response.split('\n') if success else []
     return jsonify({'success': success, 'files': files})
 
-
+# Route to upload a file to the server.
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
@@ -291,7 +289,6 @@ def upload_file():
 
     print(f"DEBUG - Upload result - Success: {success}, Message: {message}")
 
-    # Handle overwrite confirmation case
     if not success and "confirm overwrite" in message.lower():
         return jsonify({
             'success': False,
@@ -299,39 +296,39 @@ def upload_file():
             'needsOverwrite': True
         })
 
-    # Return the actual success status and message
     return jsonify({
         'success': success,
         'message': message
     })
 
+# SocketIO event to handle connection.
 @socketio.on('connect')
 def handle_connect():
     print('Client connected to SocketIO')
 
-
+# SocketIO event to handle disconnection.
 @socketio.on('disconnect')
 def handle_disconnect():
     print('Client disconnected from SocketIO')
 
-
+# Route to download a file from the server.
 @app.route('/download/<filename>')
 def download_file(filename):
     try:
         success, result = client.download_file(filename)
-        print(f"Download result: {success}, Path: {result}")  # Debug print
+        print(f"Download result: {success}, Path: {result}")  
 
         if success and os.path.exists(result):
             return send_file(result, as_attachment=True, download_name=filename)
         else:
-            print(f"Download failed for {filename}")  # Debug print
+            print(f"Download failed for {filename}")  
             return f"File {filename} not found", 404
     except Exception as e:
-        print(f"Download exception: {str(e)}")  # Debug print
+        print(f"Download exception: {str(e)}")  
         return f"Download failed: {str(e)}", 500
 
-
-@app.route('/delete/<filename>', methods=['DELETE'])  # Changed to DELETE method
+# Route to delete a file from the server.
+@app.route('/delete/<filename>', methods=['DELETE'])  
 def delete_file(filename):
     try:
         success, message = client.delete_file(filename)
@@ -345,16 +342,7 @@ def delete_file(filename):
             'message': f'Delete failed: {str(e)}'
         }), 500
 
-
-# Add error handlers
-@app.errorhandler(413)
-def request_entity_too_large(error):
-    return jsonify({
-        'success': False,
-        'message': 'File too large'
-    }), 413
-
-
+# Error handler for internal server error.
 @app.errorhandler(500)
 def internal_server_error(error):
     return jsonify({

@@ -1,11 +1,11 @@
 import socket
 import threading
 import os
-import json
 from datetime import datetime
 from statistics_collector import Network_Statistics
 
 
+# Class that contains all methods for the server side. 
 class FileServer:
     def __init__(self, host='10.128.0.2', port=3300):
         self.host = host
@@ -21,9 +21,9 @@ class FileServer:
         if not os.path.exists(self.storage_path):
             os.makedirs(self.storage_path)
 
+    # Method to start the server.
     def start(self):
         try:
-            # Start the File Server
             self.server_socket.bind((self.host, self.port))
             self.server_socket.listen(6)
             print(f'Starting Server on {self.host}:{self.port}')
@@ -43,9 +43,8 @@ class FileServer:
         finally:
             self.server_socket.close()
 
+    # Handles response from connection (client) and performs the required operation.
     def handle_client(self, connection, address):
-        # Handle Each Client Connection
-        print(f'[*] Established connection from IP {address[0]} port: {address[1]}')
         while True:
             try:
                 command = connection.recv(1024).decode()
@@ -78,6 +77,7 @@ class FileServer:
         connection.close()
         print(f'Connection closed from IP {address[0]} port: {address[1]}')
 
+    # Method to handle overall directory. Similar to the basic index.
     def handle_dir(self, connection):
         try:
             files = os.listdir(self.storage_path)
@@ -87,8 +87,7 @@ class FileServer:
                 file_path = os.path.join(self.storage_path, file_name)
                 size = os.path.getsize(file_path)
                 modified = os.path.getmtime(file_path)
-                # Only include the filename without additional metadata
-                file_info.append(file_name)  # Changed this line
+                file_info.append(file_name) 
 
             response = "\n".join(file_info) if file_info else "No Files Found"
             connection.send(response.encode())
@@ -97,22 +96,28 @@ class FileServer:
             print(f"Directory listing error: {str(ex)}")
             connection.send(f"Directory listing failed: {str(ex)}".encode())
 
-    # Implement Later
+    #  Method to handle upload from the client to the server.
     def handle_upload(self, connection, file_name):
         try:
+            overwrite_requested = 'overwrite' in file_name
+            if overwrite_requested:
+                file_name = file_name.replace(' overwrite', '')
+
+            connection.send("Ready".encode())
+
             file_size = int(connection.recv(1024).decode())
             file_path = os.path.join(self.storage_path, file_name)
 
-            # If file exists, ask about overwriting
-            if os.path.exists(file_path):
+            if os.path.exists(file_path) and not overwrite_requested:
                 connection.send("File Exists. Overwrite? (Yes/No): ".encode())
+
                 response = connection.recv(1024).decode().lower()
                 if response != 'yes':
                     connection.send("Upload Canceled.".encode())
                     return
 
             connection.send("Ready".encode())
-
+            # ----------------------------------------------------------------------
             start_time = datetime.now()
             received_size = 0
 
@@ -140,6 +145,7 @@ class FileServer:
         except Exception as ex:
             connection.send(f"Upload Failed: {str(ex)}").encode()
 
+    # Method to handle download from the server to the client.
     def handle_download(self, connection, file_name):
         try:
             file_path = os.path.join(self.storage_path, file_name)
@@ -152,6 +158,8 @@ class FileServer:
 
             if connection.recv(1024).decode() != "Ready":
                 return
+            
+            # ----------------------------------------------------------------------
 
             start_time = datetime.now()
             size = 0
@@ -178,6 +186,7 @@ class FileServer:
         except Exception as ex:
             connection.send(f"Download Failed: {str(ex)}".encode())
 
+    # Method to handle delete from the server.
     def handle_delete(self, connection, file_name):
         try:
             file_path = os.path.join(self.storage_path, file_name)
@@ -194,6 +203,8 @@ class FileServer:
             connection.send(f"Delete failed: {str(ex)}".encode())
 
 
+# Main method which creates oa server object and runs it by calling start(). 
+# This is run when the server_side.py file is executed.
 if __name__ == '__main__':
     server = FileServer()
     server.start()
