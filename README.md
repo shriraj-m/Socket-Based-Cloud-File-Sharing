@@ -39,10 +39,10 @@ A client-server program / application that enables file sharing over a network u
   - ├── client_uploads/
 
 ## Server Side Project Structure
-├── server_side.py 
-├── statistics_collector.py 
-├── network_statistics.json
-├── server_storage/
+-   ├── server_side.py 
+-   ├── statistics_collector.py 
+-   ├── network_statistics.json
+-   ├── server_storage/
 
 
 ## Setup and Usage
