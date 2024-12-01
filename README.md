@@ -15,7 +15,7 @@ A client-server program / application that enables file sharing over a network u
 - **Connection Management**: Automatic reconnection handling and connection status monitoring
 - **Multi-threaded Server**: Supports multiple concurrent client connections
 
-## Techn Stack
+## Tech Stack
 
 - **Backend**:
   - Python
@@ -57,5 +57,9 @@ Socket-Based-Cloud-File-Sharing/
 9. [Optional] Stop server and view network_statistics.json to see the stats of the actions/files.
 
 
-
-
+## Contributions
+This application acts as a final project for CNT3004 | COMPUTER NETWORKS @ Florida Polytechinc University and was completed by:
+@shrirajm
+@alexmeert
+@ianlopez07
+@mndecormier
