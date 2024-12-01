@@ -60,7 +60,7 @@ A client-server program / application that enables file sharing over a network u
 
 ## Contributions
 This application acts as a final project for CNT3004 | COMPUTER NETWORKS @ Florida Polytechinc University and was completed by:
-@shrirajm
-@alexmeert
-@ianlopez07
-@mndecormier
+- @shrirajm
+- @alexmeert
+- @ianlopez07
+- @mndecormier
